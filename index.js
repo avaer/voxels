@@ -1098,12 +1098,46 @@ const boxGeometry = (() => {
 container.add(boxMesh); */
 
 const portalSize = 3;
+const cornersGeometry = (() => {
+  const cornersShape = new THREE.Shape();
+  (function corners(ctx) {
+    const size = 0.03;
+    ctx.moveTo(-size, size);
+    ctx.lineTo(size*2, size);
+    ctx.lineTo(size*2, 0);
+    ctx.lineTo(0, 0);
+    ctx.lineTo(0, -size*2);
+    ctx.lineTo(-size, -size*2);
+  })(cornersShape);
+  const cornerGeometry = new THREE.ShapeBufferGeometry(cornersShape);
+  const cornersGeometry = BufferGeometryUtils.mergeBufferGeometries([
+    cornerGeometry.clone()
+      .applyMatrix4(new THREE.Matrix4().makeRotationFromQuaternion(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), 0)))
+      .applyMatrix4(new THREE.Matrix4().makeTranslation(-0.5, 0.5, 0)),
+    cornerGeometry.clone()
+      .applyMatrix4(new THREE.Matrix4().makeRotationFromQuaternion(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), -Math.PI/2)))
+      .applyMatrix4(new THREE.Matrix4().makeTranslation(0.5, 0.5, 0)),
+    cornerGeometry.clone()
+      .applyMatrix4(new THREE.Matrix4().makeRotationFromQuaternion(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), -Math.PI/2*2)))
+      .applyMatrix4(new THREE.Matrix4().makeTranslation(0.5, -0.5, 0)),
+    cornerGeometry.clone()
+      .applyMatrix4(new THREE.Matrix4().makeRotationFromQuaternion(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), -Math.PI/2*3)))
+      .applyMatrix4(new THREE.Matrix4().makeTranslation(-0.5, -0.5, 0))
+  ]);
+  // cornersGeometry.computeBoundingBox();
+  // cornersGeometry.boundingBox.min.z = -0.01;
+  // cornersGeometry.boundingBox.max.z = 0.01;
+  return cornersGeometry;
+})();
 const tabMesh1 = (() => {
+  const geometry = cornersGeometry.clone()
+    .applyMatrix4(new THREE.Matrix4().makeScale(portalSize, portalSize, 1));
   const material = new THREE.MeshBasicMaterial({
     color: 0x000000,
     // wireframe: true,
+    side: THREE.DoubleSide,
   });
-  const mesh = new THREE.Mesh(boxGeometry.clone().applyMatrix4(new THREE.Matrix4().makeScale(portalSize, portalSize, 0)), material);
+  const mesh = new THREE.Mesh(geometry, material);
   mesh.position.set(1, 1.5, -4);
 
   /* const labelMesh = (() => {
@@ -1142,11 +1176,12 @@ const innerMesh = (() => {
     textureHeight: 1024 * window.devicePixelRatio,
     color: 0x889999,
     addColor: 0x300000,
-    recursion: 1
+    recursion: 1,
   });
   // mesh.position.set(-1, 1.5, -2.1);
   // mesh.position.set(-3, 1.5, -1.5);
-  mesh.position.copy(tabMesh1.position);
+  mesh.position.copy(tabMesh1.position)
+    // .add(new THREE.Vector3(0, 0, 0.001).applyQuaternion(tabMesh1.quaternion));
   /* mesh.rotation.order = 'YXZ';
   mesh.rotation.y = Math.PI; */
   /* const material = new THREE.MeshBasicMaterial({
