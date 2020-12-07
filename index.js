@@ -592,7 +592,7 @@ xrChunker.addEventListener('addchunk', e => {
   // chunk.object.add(volumeMesh);
   chunk.volumeMesh = volumeMesh;
 
-  const potentialsTexture = new THREE.DataTexture(null, (width+1)*(height+1)*(depth+1), 1, THREE.LuminanceFormat, THREE.FloatType, THREE.UVMapping, THREE.ClampToEdgeWrapping, THREE.ClampToEdgeWrapping, THREE.NearestFilter, THREE.NearestFilter);
+  const potentialsTexture = new THREE.DataTexture(null, (width+1)*(height+1)*(depth+1), 1, THREE.RedFormat, THREE.FloatType, THREE.UVMapping, THREE.ClampToEdgeWrapping, THREE.ClampToEdgeWrapping, THREE.NearestFilter, THREE.NearestFilter);
   chunk.potentialsTexture = potentialsTexture;
   /* const voxelsMaterial = (() => {
     const voxelsVsh = `
