@@ -1,3 +1,6 @@
+import * as THREE from 'three';
+import {app} from 'app';
+
 const localVector = new THREE.Vector3();
 const localVector2 = new THREE.Vector3();
 const localVector3 = new THREE.Vector3();
@@ -202,9 +205,55 @@ export class XRChunker extends EventTarget {
     this.running = false;
     this.arrayBuffer = new ArrayBuffer(2*1024*1024);
 
-    this.worker = (() => {
+    this.worker = null;
+    this._neededCoordsCache = [];
+    this.loaded = false;
+
+    this.loadPromise = (async () => {
       let cbs = [];
-      const worker = new Worker('mc-worker.js');
+      const workerUrl = app.files['./spatial-engine/mc-worker.js'];
+      const res = await fetch(workerUrl);
+      let s = await res.text();
+
+      const _mapScript = async script => {
+        const r = /^(\s*import\s*['"])(.+)(['"])/gm;
+        const replacements = await Promise.all(Array.from(script.matchAll(r)).map(async match => {
+          let u = match[2];
+          {
+            u = app.files[u.replace(/^\.\//, './spatial-engine/')];
+            const res = await fetch(u);
+            let s = await res.text();
+
+            {
+              let u2 = app.files['./spatial-engine/bin/mc.wasm'];
+              const res2 = await fetch(u2);
+              const blob2 = await res2.blob();
+              u2 = URL.createObjectURL(blob2, {
+                type: 'application/octet-stream',
+              });
+              s = s.replace(/'bin\/mc\.wasm'/, `'${u2}'`);
+            }
+
+            u = URL.createObjectURL(new Blob([s], {
+              type: 'text/javascript',
+            }));
+          }
+          return u;
+        }));
+        let index = 0;
+        script = script.replace(r, function() {
+          return arguments[1] + replacements[index++] + arguments[3];
+        });
+        return script;
+      };
+      s = await _mapScript(s);
+
+      const u = URL.createObjectURL(new Blob([s], {
+        type: 'text/javascript',
+      }));
+      const worker = new Worker(u, {
+        type: 'module',
+      });
       worker.onmessage = e => {
         const {data} = e;
         const {error, result} = data;
@@ -212,6 +261,7 @@ export class XRChunker extends EventTarget {
       };
       worker.onerror = err => {
         console.warn(err);
+        debugger;
       };
       worker.request = (req, transfers) => new Promise((accept, reject) => {
         worker.postMessage(req, transfers);
@@ -224,10 +274,9 @@ export class XRChunker extends EventTarget {
           }
         });
       });
-      return worker;
+      this.worker = worker;
+      this.loaded = true;
     })();
-
-    this._neededCoordsCache = [];
   }
   getChunkAt(x, y, z) {
     for (let i = 0; i < this.chunks.length; i++) {
@@ -304,7 +353,7 @@ export class XRChunker extends EventTarget {
     }
   }
   async updateMesh(getPointCloud) {
-    if (!this.running) {
+    if (this.loaded && !this.running) {
       this.running = true;
 
       const {width, voxelSize, marchCubesTexSize, pointCloudBuffer} = await getPointCloud();
