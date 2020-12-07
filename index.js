@@ -1178,6 +1178,12 @@ const innerMesh = (() => {
     addColor: 0x300000,
     recursion: 1,
   });
+  mesh.onBeforeRender2 = () => {
+    app.onBeforeRender();
+  };
+  mesh.onAfterRender2 = () => {
+    app.onAfterRender();
+  };
   // mesh.position.set(-1, 1.5, -2.1);
   // mesh.position.set(-3, 1.5, -1.5);
   mesh.position.copy(tabMesh1.position)
