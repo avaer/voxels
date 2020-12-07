@@ -1,3 +1,5 @@
+import './bin/mc2.js';
+
 /* importScripts('/archae/plugins/_core_engines_resource/serve/three.js');
 const {exports: THREE} = self.module;
 importScripts('/archae/assets/murmurhash.js');
@@ -20,50 +22,21 @@ const width = 10;
 const height = 10;
 const depth = 10;
 // let noiserOffset = 0;
-self.wasmModule = (moduleName, moduleFn) => {
-  // console.log('wasm module', moduleName, moduleFn);
-  if (moduleName === 'mc') {
-    self.LocalModule = moduleFn({
-      print(text) { console.log(text); },
-      printErr(text) { console.warn(text); },
-      locateFile(path, scriptDirectory) {
-        if (path === 'mc.wasm') {
-          return (importScripts.basePath || '') + 'bin/' + path;
-        } else {
-          return path;
-        }
-      },
-      onRuntimeInitialized: () => {
-        // Module = localModule;
-
-        // noiserOffset = self.LocalModule._doNoiser(7);
-
-        loaded = true;
-        _flushMessages();
-      },
-    });
-
-    // console.log('got module', Module);
-  } else {
-    console.warn('unknown wasm module', moduleName);
-  }
-};
-importScripts('bin/mc.js');
 
 class Allocator {
   constructor() {
     this.offsets = [];
   }
   alloc(constructor, size) {
-    const offset = self.LocalModule._doMalloc(size * constructor.BYTES_PER_ELEMENT);
-    const b = new constructor(self.LocalModule.HEAP8.buffer, self.LocalModule.HEAP8.byteOffset + offset, size);
+    const offset = Module._doMalloc(size * constructor.BYTES_PER_ELEMENT);
+    const b = new constructor(Module.HEAP8.buffer, Module.HEAP8.byteOffset + offset, size);
     b.offset = offset;
     this.offsets.push(offset);
     return b;
   }
   freeAll() {
     for (let i = 0; i < this.offsets.length; i++) {
-      self.LocalModule._doFree(this.offsets[i]);
+      Module._doFree(this.offsets[i]);
     }
     this.offsets.length = 0;
   }
@@ -81,7 +54,7 @@ const _handleMessage = data => {
 
       const colors = allocator.alloc(Uint8Array, 300*300*3);
 
-      self.LocalModule._doNoiserGetBiomeColors(
+      Module._doNoiserGetBiomeColors(
         noiserOffset,
         -150,
         150,
@@ -111,7 +84,7 @@ const _handleMessage = data => {
       const water = allocator.alloc(Float32Array, NUM_CELLS_OVERSCAN * NUM_CELLS_OVERSCAN * NUM_CELLS_OVERSCAN_Y);
       const lava = allocator.alloc(Float32Array, NUM_CELLS_OVERSCAN * NUM_CELLS_OVERSCAN * NUM_CELLS_OVERSCAN_Y);
 
-      self.LocalModule._doNoiserApply(
+      Module._doNoiserApply(
         noiserOffset,
         x,
         z,
@@ -138,7 +111,7 @@ const _handleMessage = data => {
       const indexRanges = allocator.alloc(Uint32Array, NUM_CHUNKS_HEIGHT * 6);
       const colors = allocator.alloc(Float32Array, 1024*1024/Float32Array.BYTES_PER_ELEMENT);
 
-      self.LocalModule._doNoiserFill(
+      Module._doNoiserFill(
         noiserOffset,
         x,
         z,
@@ -190,7 +163,7 @@ const _handleMessage = data => {
       const potentialsBlockSize = (width+1)*(height+1)*(depth+1);
       const potentialsBuffer = allocator.alloc(Float32Array, chunkCoordsArray.length*potentialsBlockSize);
 
-      self.LocalModule._doSmoothedPotentials(
+      Module._doSmoothedPotentials(
         chunkCoords.offset,
         numChunkCoords,
         colorTargetBuf.offset,
@@ -238,7 +211,7 @@ const _handleMessage = data => {
       const barycentricIndex = allocator.alloc(Uint32Array, 1);
       const uvIndex = allocator.alloc(Uint32Array, 1);
       const uvIndex2 = allocator.alloc(Uint32Array, 1);
-      self.LocalModule._doMarchingCubes(
+      Module._doMarchingCubes(
         dims.offset,
         potential.offset,
         shift.offset,
@@ -307,7 +280,7 @@ const _handleMessage = data => {
       const uvIndex = allocator.alloc(Uint32Array, chunkCoordsArray.length);
       const uvIndex2 = allocator.alloc(Uint32Array, chunkCoordsArray.length);
 
-      self.LocalModule._doComputeGeometry(
+      Module._doComputeGeometry(
         chunkCoords.offset,
         numChunkCoords,
         colorTargetBuf.offset,
@@ -408,7 +381,7 @@ const _handleMessage = data => {
       direction[2] = directionData[2];
       const result = allocator.alloc(Float32Array, 3);
 
-      self.LocalModule._doCollide(
+      Module._doCollide(
         positions.offset,
         indices.offset,
         positions.length,
@@ -444,3 +417,10 @@ self.onmessage = e => {
     _handleMessage(data);
   }
 };
+
+wasmModulePromise.then(() => {
+  loaded = true;
+  _flushMessages();
+}).catch(err => {
+  console.warn(err.stack);
+});
