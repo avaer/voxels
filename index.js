@@ -1,38 +1,12 @@
-import './webxr-polyfill.module.js';
-import './HelioWebXRPolyfill.js';
-import './three.js';
-import './BufferGeometryUtils.js';
-import './Reflector.js';
-import Avatar from 'https://avatars.exokit.org/avatars.js';
-import ModelLoader from 'https://model-loader.exokit.org/model-loader.js';
-import {XRRaycaster, XRChunker} from 'https://spatial-engine.exokit.org/spatial-engine.js';
+import * as THREE from 'three';
+import {BufferGeometryUtils} from 'BufferGeometryUtils';
+import {renderer, scene, camera, app} from 'app';
+import {Reflector} from './Reflector.js';
+// import Avatar from 'https://avatars.exokit.org/avatars.js';
+// import ModelLoader from 'https://model-loader.exokit.org/model-loader.js';
+import {XRRaycaster, XRChunker} from './spatial-engine/spatial-engine.js';
 
 (async () => {
-
-const header = document.getElementById('header');
-const mainSelector = document.getElementById('main-selector');
-mainSelector.addEventListener('focus', () => {
-  mainSelector.classList.add('open');
-});
-mainSelector.addEventListener('blur', () => {
-  mainSelector.classList.remove('open');
-});
-const mainOptions = Array.from(mainSelector.querySelectorAll('.option'));
-for (let i = 0; i < mainOptions.length; i++) {
-  const mainOption = mainOptions[i];
-  mainOption.addEventListener('click', e => {
-    if (!header.classList.contains(`main-${i+1}`)) {
-      for (let i = 0; i < mainOptions.length; i++) {
-        header.classList.remove(`main-${i+1}`);
-        mainOptions[i].classList.remove('open');
-      }
-      mainOption.classList.add('open');
-      mainSelector.blur();
-      mainSelector.dispatchEvent(new CustomEvent('blur'));
-      header.classList.add(`main-${i+1}`);
-    }
-  });
-}
 
 const parcelSize = 16;
 const width = 10;
@@ -62,10 +36,7 @@ const localRay = new THREE.Ray();
 const localColor = new THREE.Color();
 const localColor2 = new THREE.Color();
 
-const userHeight = 1.7;
-const _getHeightFactor = rigHeight => rigHeight / userHeight;
-
-const renderer = new THREE.WebGLRenderer({
+/* const renderer = new THREE.WebGLRenderer({
   canvas: document.getElementById('hero-canvas'),
   antialias: true,
   alpha: true,
@@ -75,45 +46,19 @@ renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setClearColor(localColor.setRGB(1, 1, 1), 1);
 renderer.sortObjects = false;
 renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFShadowMap;
+renderer.shadowMap.type = THREE.PCFShadowMap; */
 /* renderer.physicallyCorrectLights = true;
 renderer.gammaFactor = 2.2; */
 
 // window.browser.magicleap.RequestDepthPopulation(true);
 // renderer.autoClear = false;
 
-const scene = new THREE.Scene();
-scene.matrixAutoUpdate = false;
-// scene.background = new THREE.Color(0xFFFFFF);
-
-const camera = new THREE.PerspectiveCamera(60, window.innerWidth/window.innerHeight, 0.1, 1000);
-const dolly = new THREE.Object3D();
-dolly.add(camera);
-scene.add(dolly);
-
-const SCENES = {
-  desktop: {
-    camera: new THREE.Vector3(-1.5, 1, 2),
-  },
-  mobile: {
-    camera: new THREE.Vector3(0, 1.8, 2),
-  },
-};
-const _setCamera = () => {
-  const SCENE = SCENES[window.innerWidth >= 800 ? 'desktop' : 'mobile'];
-  camera.position.copy(SCENE.camera);
-
-  camera.aspect = window.innerWidth/window.innerHeight;
-  camera.updateProjectionMatrix();
-};
-_setCamera();
-
 const container = new THREE.Object3D();
 
-const ambientLight = new THREE.AmbientLight(0x808080);
-scene.add(ambientLight);
+/* const ambientLight = new THREE.AmbientLight(0x808080);
+scene.add(ambientLight); */
 
-{
+/* {
   const SHADOW_MAP_WIDTH = 1024;
   const SHADOW_MAP_HEIGHT = 1024;
 
@@ -124,18 +69,17 @@ scene.add(ambientLight);
   directionalLight.castShadow = true;
 
   directionalLight.shadow = new THREE.LightShadow(new THREE.PerspectiveCamera( 50, 1, 0.1, 50 ));
-  // directionalLight.shadow.bias = 0.0001;
 
   directionalLight.shadow.mapSize.width = SHADOW_MAP_WIDTH;
   directionalLight.shadow.mapSize.height = SHADOW_MAP_HEIGHT;
 
   container.add(directionalLight);
-}
+} */
 
 const floorBaseMesh = (() => {
   const geometry = new THREE.PlaneBufferGeometry(100, 100)
-    .applyMatrix(new THREE.Matrix4().makeRotationAxis(new THREE.Vector3(1, 0, 0), -Math.PI/2))
-    .applyMatrix(localMatrix.makeTranslation(0, -0.1, 0));
+    .applyMatrix4(new THREE.Matrix4().makeRotationAxis(new THREE.Vector3(1, 0, 0), -Math.PI/2))
+    .applyMatrix4(localMatrix.makeTranslation(0, -0.1, 0));
   const material = new THREE.MeshPhongMaterial({
     color: 0xCCCCCC,
     shininess: 0,
@@ -149,146 +93,6 @@ const floorBaseMesh = (() => {
 })();
 container.add(floorBaseMesh);
 
-let rig = null;
-let heightFactor = 1;
-(async () => {
-  const model = await ModelLoader.loadModelUrl('./miku.vrm');
-  model.scene.traverse(o => {
-    o.castShadow = true;
-  });
-  rig = new Avatar(model, {
-    fingers: true,
-    hair: true,
-    visemes: true,
-    // decapitate: possessRig,
-    // microphoneMediaStream,
-    // debug: !newModel,
-  });
-  container.add(rig.model);
-
-  heightFactor = _getHeightFactor(rig.height);
-})();
-const pedestalMeshes = [];
-const itemMeshes = [];
-(async () => {
-  {
-    const src = 'https://item-models.exokit.org/glb/apocalypse/SM_Generic_Tree_01.glb';
-    const object = await ModelLoader.loadModelUrl(src);
-    const model = object.scene;
-    model.position.x = 0.2;
-    model.position.z = -1;
-    model.traverse(o => {
-      o.castShadow = true;
-    });
-    container.add(model);
-  }
-  {
-    const src = 'https://item-models.exokit.org/glb/apocalypse/SM_Generic_Mountains_Grass_01.glb';
-    const object = await ModelLoader.loadModelUrl(src);
-    const model = object.scene;
-    model.position.x = 10;
-    model.position.z = -20;
-    container.add(model);
-  }
-  // let x = -3;
-  let angle = 0;
-  const _positionPedestalMesh = pedestalMesh => {
-    pedestalMesh.position.set(0, 0.51, 0)
-      .add(new THREE.Vector3(0, 0, -1.5).applyQuaternion(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI/2-Math.PI*2*0.1*(angle++))));
-  };
-  {
-    const pedestalMesh = _makePedestalMesh();
-    _positionPedestalMesh(pedestalMesh);
-
-    const src = 'https://item-models.exokit.org/glb/apocalypse/SK_Wep_FlameThrower_01.glb';
-    const object = await ModelLoader.loadModelUrl(src);
-    const model = object.scene;
-    model.traverse(o => {
-      if (o.isMesh) {
-        o.castShadow = true;
-      }
-    });
-    pedestalMesh.add(model);
-    itemMeshes.push(model);
-
-    container.add(pedestalMesh);
-    pedestalMeshes.push(pedestalMesh);
-  }
-  /* {
-    const pedestalMesh = _makePedestalMesh();
-    _positionPedestalMesh(pedestalMesh);
-
-    const src = 'https://item-models.exokit.org/glb/apocalypse/SK_Wep_AssaultRifle_02.glb';
-    const object = await ModelLoader.loadModelUrl(src);
-    const model = object.scene;
-    model.traverse(o => {
-      if (o.isMesh) {
-        o.castShadow = true;
-      }
-    });
-    pedestalMesh.add(model);
-    itemMeshes.push(model);
-
-    container.add(pedestalMesh);
-    pedestalMeshes.push(pedestalMesh);
-  } */
-  {
-    const pedestalMesh = _makePedestalMesh();
-    _positionPedestalMesh(pedestalMesh);
-
-    const src = 'https://item-models.exokit.org/glb/apocalypse/SK_Wep_Shotgun_01.glb';
-    const object = await ModelLoader.loadModelUrl(src);
-    const model = object.scene;
-    model.traverse(o => {
-      if (o.isMesh) {
-        o.castShadow = true;
-      }
-    });
-    pedestalMesh.add(model);
-    itemMeshes.push(model);
-
-    container.add(pedestalMesh);
-    pedestalMeshes.push(pedestalMesh);
-  }
-  angle += 2;
-  {
-    const pedestalMesh = _makePedestalMesh();
-    _positionPedestalMesh(pedestalMesh);
-
-    const src = 'https://item-models.exokit.org/glb/apocalypse/SK_Wep_Flashbang_01.glb';
-    const object = await ModelLoader.loadModelUrl(src);
-    const model = object.scene;
-    model.traverse(o => {
-      if (o.isMesh) {
-        o.castShadow = true;
-      }
-    });
-    pedestalMesh.add(model);
-    itemMeshes.push(model);
-
-    container.add(pedestalMesh);
-    pedestalMeshes.push(pedestalMesh);
-  }
-  {
-    const pedestalMesh = _makePedestalMesh();
-    _positionPedestalMesh(pedestalMesh);
-
-    const src = 'https://item-models.exokit.org/glb/apocalypse/SK_Wep_HuntingRifle_01.glb';
-    const object = await ModelLoader.loadModelUrl(src);
-    const model = object.scene;
-    model.traverse(o => {
-      if (o.isMesh) {
-        o.castShadow = true;
-      }
-    });
-    pedestalMesh.add(model);
-    itemMeshes.push(model);
-
-    container.add(pedestalMesh);
-    pedestalMeshes.push(pedestalMesh);
-  }
-})();
-
 function mod(a, n) {
   return ((a%n)+n)%n;
 }
@@ -296,9 +100,9 @@ const floorMesh = (() => {
   const numTiles = 16;
   const numTiles2P1 = 2*numTiles+1;
   const planeBufferGeometry = new THREE.PlaneBufferGeometry(1, 1)
-    .applyMatrix(localMatrix.makeScale(0.95, 0.95, 1))
-    .applyMatrix(localMatrix.makeRotationFromQuaternion(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -Math.PI/2)))
-    // .applyMatrix(localMatrix.makeTranslation(0, 0.1, 0))
+    .applyMatrix4(localMatrix.makeScale(0.95, 0.95, 1))
+    .applyMatrix4(localMatrix.makeRotationFromQuaternion(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -Math.PI/2)))
+    // .applyMatrix4(localMatrix.makeTranslation(0, 0.1, 0))
     .toNonIndexed();
   const numCoords = planeBufferGeometry.attributes.position.array.length;
   const numVerts = numCoords/3;
@@ -310,7 +114,7 @@ const floorMesh = (() => {
   for (let x = -numTiles; x <= numTiles; x++) {
     for (let z = -numTiles; z <= numTiles; z++) {
       const newPlaneBufferGeometry = planeBufferGeometry.clone()
-        .applyMatrix(localMatrix.makeTranslation(x, 0, z));
+        .applyMatrix4(localMatrix.makeTranslation(x, 0, z));
       positions.set(newPlaneBufferGeometry.attributes.position.array, i * newPlaneBufferGeometry.attributes.position.array.length);
       for (let j = 0; j < newPlaneBufferGeometry.attributes.position.array.length/3; j++) {
         localVector.set(x, 0, z).toArray(centers, i*newPlaneBufferGeometry.attributes.position.array.length + j*3);
@@ -340,7 +144,7 @@ const floorMesh = (() => {
   geometry.setAttribute('typex', new THREE.BufferAttribute(typesx, 1));
   geometry.setAttribute('typez', new THREE.BufferAttribute(typesz, 1));
   /* const geometry = new THREE.PlaneBufferGeometry(300, 300, 300, 300)
-    .applyMatrix(new THREE.Matrix4().makeRotationFromQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, -1, 0), new THREE.Vector3(0, 0, 1)))); */
+    .applyMatrix4(new THREE.Matrix4().makeRotationFromQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, -1, 0), new THREE.Vector3(0, 0, 1)))); */
   const floorVsh = `
     #define PI 3.1415926535897932384626433832795
     uniform float uAnimation;
@@ -476,105 +280,6 @@ const floorMesh = (() => {
 floorMesh.position.set(-8, 0, -8);
 container.add(floorMesh);
 
-const wallGeometry = (() => {
-  const panelGeometries = [];
-  for (let x = -8; x <= 8; x++) {
-    panelGeometries.push(
-      new THREE.BoxBufferGeometry(0.01, 2, 0.01)
-        .applyMatrix(new THREE.Matrix4().makeTranslation(x, 1, -8))
-    );
-  }
-  for (let h = 0; h <= 2; h++) {
-    panelGeometries.push(
-      new THREE.BoxBufferGeometry(16, 0.01, 0.01)
-        .applyMatrix(new THREE.Matrix4().makeTranslation(0, h, -8))
-    );
-  }
-  return THREE.BufferGeometryUtils.mergeBufferGeometries(panelGeometries);
-})();
-const topWallGeometry = wallGeometry.clone()
-  .applyMatrix(new THREE.Matrix4().makeTranslation(-0.5, 0, -0.5));
-const leftWallGeometry = wallGeometry.clone()
-  .applyMatrix(new THREE.Matrix4().makeRotationAxis(new THREE.Vector3(0, 1, 0), Math.PI/2))
-  .applyMatrix(new THREE.Matrix4().makeTranslation(-0.5, 0, -0.5));
-const rightWallGeometry = wallGeometry.clone()
-  .applyMatrix(new THREE.Matrix4().makeRotationAxis(new THREE.Vector3(0, 1, 0), -Math.PI/2))
-  .applyMatrix(new THREE.Matrix4().makeTranslation(-0.5, 0, -0.5));
-const bottomWallGeometry = wallGeometry.clone()
-  .applyMatrix(new THREE.Matrix4().makeRotationAxis(new THREE.Vector3(0, 1, 0), Math.PI))
-  .applyMatrix(new THREE.Matrix4().makeTranslation(-0.5, 0, -0.5));
-THREE.Parcel = function Guardian(extents, distanceFactor, color) {
-  const geometry = (() => {
-    const geometries = [];
-    const [[x1, y1, x2, y2]] = extents;
-    const ax1 = (x1 + 8)/16;
-    const ay1 = (y1 + 8)/16;
-    const ax2 = (x2 + 8)/16;
-    const ay2 = (y2 + 8)/16;
-    for (let x = ax1; x < ax2; x++) {
-      geometries.push(
-        topWallGeometry.clone()
-          .applyMatrix(new THREE.Matrix4().makeTranslation(x*16, 0, ay1*16))
-      );
-      geometries.push(
-        bottomWallGeometry.clone()
-          .applyMatrix(new THREE.Matrix4().makeTranslation(x*16, 0, (ay2-1)*16))
-      );
-    }
-    for (let y = ay1; y < ay2; y++) {
-      geometries.push(
-        leftWallGeometry.clone()
-          .applyMatrix(new THREE.Matrix4().makeTranslation(ax1*16, 0, y*16))
-      );
-      geometries.push(
-        rightWallGeometry.clone()
-          .applyMatrix(new THREE.Matrix4().makeTranslation((ax2-1)*16, 0, y*16))
-      );
-    }
-    return THREE.BufferGeometryUtils.mergeBufferGeometries(geometries);
-  })();
-  const gridVsh = `
-    // varying vec3 vWorldPos;
-    // varying vec2 vUv;
-    varying float vDepth;
-    void main() {
-      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.);
-      // vUv = uv;
-      // vWorldPos = abs(position);
-      vDepth = gl_Position.z / ${distanceFactor.toFixed(8)};
-    }
-  `;
-  const gridFsh = `
-    // uniform sampler2D uTex;
-    uniform vec3 uColor;
-    // uniform float uAnimation;
-    // varying vec3 vWorldPos;
-    varying float vDepth;
-    void main() {
-      gl_FragColor = vec4(uColor, (1.0-vDepth)*0.2);
-    }
-  `;
-  const material = new THREE.ShaderMaterial({
-    uniforms: {
-      uColor: {
-        type: 'c',
-        value: new THREE.Color(color),
-      },
-    },
-    vertexShader: gridVsh,
-    fragmentShader: gridFsh,
-    transparent: true,
-  });
-  const mesh = new THREE.Mesh(geometry, material);
-  mesh.frustumCulled = false;
-  mesh.setColor = c => {
-    mesh.material.uniforms.uColor.value.setHex(c);
-  };
-  return mesh;
-};
-const parcelMesh = new THREE.Parcel([[-16, -16, 0, 0]], 10, 0x5c6bc0);
-container.add(parcelMesh);
-
 const depthMaterial = (() => {
   const depthVsh = `
     // uniform float uAnimation;
@@ -668,7 +373,7 @@ const voxelsGeometry = (() => {
     for (let y = 0; y < height; y++) {
       for (let z = 0; z < depth; z++) {
         const newCubeGeometry = cubeGeometry.clone()
-          .applyMatrix(localMatrix.makeTranslation(x*voxelSize, y*voxelSize, z*voxelSize));
+          .applyMatrix4(localMatrix.makeTranslation(x*voxelSize, y*voxelSize, z*voxelSize));
         positions.set(newCubeGeometry.attributes.position.array, i*newCubeGeometry.attributes.position.array.length);
         barycentrics.set(newCubeGeometry.attributes.barycentric.array, i*newCubeGeometry.attributes.barycentric.array.length);
         const offset = Float32Array.from([x, y, z]);
@@ -750,51 +455,51 @@ const cameraTarget = new THREE.WebGLRenderTarget(cameraSize, cameraSize, {
 
 const volumeTargetGeometry = (() => {
   const edgeWidth = 0.01;
-  const edgeGeometry = THREE.BufferGeometryUtils.mergeBufferGeometries([
+  const edgeGeometry = BufferGeometryUtils.mergeBufferGeometries([
     new THREE.BoxBufferGeometry(edgeWidth, 0.4, edgeWidth)
-      .applyMatrix(new THREE.Matrix4().makeTranslation(0, -0.4/2, 0)),
+      .applyMatrix4(new THREE.Matrix4().makeTranslation(0, -0.4/2, 0)),
     new THREE.BoxBufferGeometry(edgeWidth, 0.4, edgeWidth)
-      .applyMatrix(new THREE.Matrix4().makeRotationFromQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, -1, 0), new THREE.Vector3(0, 0, 1))))
-      .applyMatrix(new THREE.Matrix4().makeTranslation(0, 0, 0.4/2)),
+      .applyMatrix4(new THREE.Matrix4().makeRotationFromQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, -1, 0), new THREE.Vector3(0, 0, 1))))
+      .applyMatrix4(new THREE.Matrix4().makeTranslation(0, 0, 0.4/2)),
     new THREE.BoxBufferGeometry(edgeWidth, 0.4, edgeWidth)
-      .applyMatrix(new THREE.Matrix4().makeRotationFromQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, -1, 0), new THREE.Vector3(1, 0, 0))))
-      .applyMatrix(new THREE.Matrix4().makeTranslation(0.4/2, 0, 0)),
+      .applyMatrix4(new THREE.Matrix4().makeRotationFromQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, -1, 0), new THREE.Vector3(1, 0, 0))))
+      .applyMatrix4(new THREE.Matrix4().makeTranslation(0.4/2, 0, 0)),
   ]);
-  const portalTargetGeometry = THREE.BufferGeometryUtils.mergeBufferGeometries([
+  const portalTargetGeometry = BufferGeometryUtils.mergeBufferGeometries([
     edgeGeometry.clone()
-      .applyMatrix(new THREE.Matrix4().makeTranslation(-0.5, 0.5, 0)),
+      .applyMatrix4(new THREE.Matrix4().makeTranslation(-0.5, 0.5, 0)),
     edgeGeometry.clone()
-      .applyMatrix(new THREE.Matrix4().makeRotationFromQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, -1), new THREE.Vector3(0, -1, 0))))
-      .applyMatrix(new THREE.Matrix4().makeTranslation(-0.5, -0.5, 0)),
+      .applyMatrix4(new THREE.Matrix4().makeRotationFromQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, -1), new THREE.Vector3(0, -1, 0))))
+      .applyMatrix4(new THREE.Matrix4().makeTranslation(-0.5, -0.5, 0)),
     edgeGeometry.clone()
-      .applyMatrix(new THREE.Matrix4().makeRotationFromQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, 0, 1))))
-      .applyMatrix(new THREE.Matrix4().makeTranslation(-0.5, 0.5, 1)),
+      .applyMatrix4(new THREE.Matrix4().makeRotationFromQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, 0, 1))))
+      .applyMatrix4(new THREE.Matrix4().makeTranslation(-0.5, 0.5, 1)),
     edgeGeometry.clone()
-      .applyMatrix(new THREE.Matrix4().makeRotationFromQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), new THREE.Vector3(1, 0, 0))))
-      .applyMatrix(new THREE.Matrix4().makeTranslation(0.5, 0.5, 0)),
+      .applyMatrix4(new THREE.Matrix4().makeRotationFromQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), new THREE.Vector3(1, 0, 0))))
+      .applyMatrix4(new THREE.Matrix4().makeTranslation(0.5, 0.5, 0)),
     edgeGeometry.clone()
-      .applyMatrix(new THREE.Matrix4().makeRotationFromQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), new THREE.Vector3(1, 0, 0))))
-      .applyMatrix(new THREE.Matrix4().makeRotationFromQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, 0, 1))))
-      .applyMatrix(new THREE.Matrix4().makeTranslation(0.5, 0.5, 1)),
+      .applyMatrix4(new THREE.Matrix4().makeRotationFromQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), new THREE.Vector3(1, 0, 0))))
+      .applyMatrix4(new THREE.Matrix4().makeRotationFromQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, 0, 1))))
+      .applyMatrix4(new THREE.Matrix4().makeTranslation(0.5, 0.5, 1)),
     edgeGeometry.clone()
-      .applyMatrix(new THREE.Matrix4().makeRotationFromQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, 0, 1))))
-      .applyMatrix(new THREE.Matrix4().makeRotationFromQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(-1, 0, 0), new THREE.Vector3(0, -1, 0))))
-      .applyMatrix(new THREE.Matrix4().makeTranslation(-0.5, -0.5, 1)),
+      .applyMatrix4(new THREE.Matrix4().makeRotationFromQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, 0, 1))))
+      .applyMatrix4(new THREE.Matrix4().makeRotationFromQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(-1, 0, 0), new THREE.Vector3(0, -1, 0))))
+      .applyMatrix4(new THREE.Matrix4().makeTranslation(-0.5, -0.5, 1)),
     edgeGeometry.clone()
-      .applyMatrix(new THREE.Matrix4().makeRotationFromQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), new THREE.Vector3(1, 0, 0))))
-      .applyMatrix(new THREE.Matrix4().makeRotationFromQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(1, 0, 0), new THREE.Vector3(0, -1, 0))))
-      .applyMatrix(new THREE.Matrix4().makeTranslation(0.5, -0.5, 0)),
+      .applyMatrix4(new THREE.Matrix4().makeRotationFromQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), new THREE.Vector3(1, 0, 0))))
+      .applyMatrix4(new THREE.Matrix4().makeRotationFromQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(1, 0, 0), new THREE.Vector3(0, -1, 0))))
+      .applyMatrix4(new THREE.Matrix4().makeTranslation(0.5, -0.5, 0)),
     edgeGeometry.clone()
-      .applyMatrix(new THREE.Matrix4().makeRotationFromQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(-1, 1, 0).normalize(), new THREE.Vector3(1, -1, 0).normalize())))
-      .applyMatrix(new THREE.Matrix4().makeTranslation(0.5, -0.5, 1)),
+      .applyMatrix4(new THREE.Matrix4().makeRotationFromQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(-1, 1, 0).normalize(), new THREE.Vector3(1, -1, 0).normalize())))
+      .applyMatrix4(new THREE.Matrix4().makeTranslation(0.5, -0.5, 1)),
   ]);
-  return THREE.BufferGeometryUtils.mergeBufferGeometries([
+  return BufferGeometryUtils.mergeBufferGeometries([
     portalTargetGeometry
       .clone()
-      .applyMatrix(new THREE.Matrix4().makeTranslation(0, 0, -0.5)),
+      .applyMatrix4(new THREE.Matrix4().makeTranslation(0, 0, -0.5)),
     new THREE.BoxBufferGeometry(0.1, edgeWidth, edgeWidth),
-    new THREE.BoxBufferGeometry(edgeWidth, 0.05, edgeWidth).applyMatrix(new THREE.Matrix4().makeTranslation(0, 0.05/2, 0)),
-    new THREE.BoxBufferGeometry(edgeWidth, edgeWidth, 0.05).applyMatrix(new THREE.Matrix4().makeTranslation(0, 0, -0.05/2)),
+    new THREE.BoxBufferGeometry(edgeWidth, 0.05, edgeWidth).applyMatrix4(new THREE.Matrix4().makeTranslation(0, 0.05/2, 0)),
+    new THREE.BoxBufferGeometry(edgeWidth, edgeWidth, 0.05).applyMatrix4(new THREE.Matrix4().makeTranslation(0, 0, -0.05/2)),
   ]);
 })();
 const volumeMaterial = new THREE.MeshBasicMaterial({
@@ -808,144 +513,8 @@ const _makeVolumeMesh = () => {
   return mesh;
 };
 
-const _makePedestalMesh = () => {
-  const radius = 0.5;
-  const segments = 12;
-  const color = 0x66bb6a; // 0x5c6bc0;
-  const opacity = 0.5;
-  const circleGeometry = new THREE.CircleBufferGeometry(radius, segments)
-    .applyMatrix(new THREE.Matrix4().makeRotationAxis(new THREE.Vector3(1, 0, 0), -Math.PI/2))
-    .applyMatrix(new THREE.Matrix4().makeTranslation(0, -0.5, 0));
-  const uvs = new Float32Array(circleGeometry.attributes.position.array.length/3);
-  for (let i = 0; i < circleGeometry.attributes.position.array.length/3; i++) {
-    uvs[i] = new THREE.Vector2(circleGeometry.attributes.position.array[i*3+0], circleGeometry.attributes.position.array[i*3+2]).length()/radius;
-  }
-  window.uvs = uvs;
-  circleGeometry.setAttribute('uv2', new THREE.BufferAttribute(uvs, 1));
-  const circleMaterial = new THREE.ShaderMaterial({
-    uniforms: {
-      uAnimation: {
-        type: 'f',
-        value: 0,
-      },
-    },
-    vertexShader: `\
-      #define PI 3.1415926535897932384626433832795
-
-      uniform float uAnimation;
-      attribute float uv2;
-      varying float vBC;
-      varying float vOpacity;
-
-      void main() {
-        vBC = uv2;
-        vOpacity = 0.5 + 0.5 * (sin(uAnimation*20.0*PI*2.0)+1.0)/2.0;
-        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-      }
-    `,
-    fragmentShader: `\
-      uniform sampler2D uCameraTex;
-      varying float vBC;
-      varying float vOpacity;
-
-      void main() {
-        if (vBC > 0.95) {
-          vec3 c = vec3(${new THREE.Color().setHex(color).toArray().join(', ')});
-          float a = vOpacity * ${opacity.toFixed(8)};
-          gl_FragColor = vec4(c, a);
-        } else {
-          discard;
-        }
-      }
-    `,
-    side: THREE.DoubleSide,
-    /* polygonOffset: true,
-    polygonOffsetFactor: -1,
-    polygonOffsetUnits: -4, */
-    transparent: true,
-    // depthWrite: false,
-    extensions: {
-      derivatives: true,
-    },
-  });
-  const mesh = new THREE.Mesh(circleGeometry, circleMaterial);
-  mesh.frustumCulled = false;
-
-  const skirtGeometry = new THREE.CylinderBufferGeometry(radius, radius, radius, segments, 1, true)
-    .applyMatrix(new THREE.Matrix4().makeTranslation(0, radius/2, 0));
-  const ys = new Float32Array(skirtGeometry.attributes.position.array.length/3);
-  for (let i = 0; i < skirtGeometry.attributes.position.array.length/3; i++) {
-    ys[i] = 1-skirtGeometry.attributes.position.array[i*3+1]/radius;
-  }
-  skirtGeometry.setAttribute('y', new THREE.BufferAttribute(ys, 1));
-  skirtGeometry.applyMatrix(new THREE.Matrix4().makeTranslation(0, -0.5, 0));
-  const skirtMaterial = new THREE.ShaderMaterial({
-    uniforms: {
-      uAnimation: {
-        type: 'f',
-        value: 0,
-      },
-    },
-    vertexShader: `\
-      #define PI 3.1415926535897932384626433832795
-
-      uniform float uAnimation;
-      attribute float y;
-      attribute vec3 barycentric;
-      varying float vY;
-      varying float vUv;
-      varying float vOpacity;
-      void main() {
-        vY = y * ${opacity.toFixed(8)};
-        vUv = uv.x + uAnimation;
-        vOpacity = 0.5 + 0.5 * (sin(uAnimation*20.0*PI*2.0)+1.0)/2.0;
-        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-      }
-    `,
-    fragmentShader: `\
-      #define PI 3.1415926535897932384626433832795
-
-      uniform sampler2D uCameraTex;
-      varying float vY;
-      varying float vUv;
-      varying float vOpacity;
-
-      vec3 c = vec3(${new THREE.Color().setHex(color).toArray().join(', ')});
-
-      void main() {
-        float a = vY * (0.9 + 0.1 * (sin(vUv*PI*2.0/0.02) + 1.0)/2.0) * vOpacity;
-        gl_FragColor = vec4(c, a);
-      }
-    `,
-    side: THREE.DoubleSide,
-    /* polygonOffset: true,
-    polygonOffsetFactor: -1,
-    polygonOffsetUnits: -4, */
-    transparent: true,
-    depthWrite: false,
-    extensions: {
-      derivatives: true,
-    },
-  });
-  const skirtMesh = new THREE.Mesh(skirtGeometry, skirtMaterial);
-  skirtMesh.frustumCulled = false;
-  mesh.add(skirtMesh);
-  mesh.skirtMesh = skirtMesh;
-
-  return mesh;
-};
-
 const raycasterCamera = new THREE.PerspectiveCamera();
 const _hideUiMeshes = () => {
-  const oldGpuParticlesMeshVisible = gpuParticlesMesh.visible;
-  gpuParticlesMesh.visible = false;
-  const unhidePedestalMeshes = pedestalMeshes.map(pedestalMesh => {
-    const oldPedestalMeshVisible = pedestalMesh.visible;
-    pedestalMesh.visible = false;
-    return () => {
-      pedestalMesh.visible = oldPedestalMeshVisible;
-    };
-  });
   const unhideXrChunks = xrChunker.chunks.map(chunk => {
     const oldVolumeMeshVisible = chunk.volumeMesh.visible;
     chunk.volumeMesh.visible = false;
@@ -961,10 +530,6 @@ const _hideUiMeshes = () => {
   });
 
   return () => {
-    gpuParticlesMesh.visible = oldGpuParticlesMeshVisible;
-    for (let i = 0; i < unhidePedestalMeshes.length; i++) {
-      unhidePedestalMeshes[i]();
-    }
     for (let i = 0; i < unhideXrChunks.length; i++) {
       unhideXrChunks[i]();
     }
@@ -982,8 +547,8 @@ const _renderRaycaster = ({target, near, far, matrixWorld, projectionMatrix}) =>
     const unhideUiMeshes = _hideUiMeshes();
 
     scene.overrideMaterial = depthMaterial;
-    const oldVrEnabled = renderer.vr.enabled;
-    renderer.vr.enabled = false;
+    const oldVrEnabled = renderer.xr.enabled;
+    renderer.xr.enabled = false;
     const oldClearColor = localColor.copy(renderer.getClearColor());
     const oldClearAlpha = renderer.getClearAlpha();
     renderer.setClearColor(localColor2.setRGB(0, 0, 0), 1);
@@ -992,7 +557,7 @@ const _renderRaycaster = ({target, near, far, matrixWorld, projectionMatrix}) =>
     renderer.render(scene, raycasterCamera);
 
     scene.overrideMaterial = null;
-    renderer.vr.enabled = oldVrEnabled;
+    renderer.xr.enabled = oldVrEnabled;
     renderer.setClearColor(oldClearColor, oldClearAlpha);
 
     unhideUiMeshes();
@@ -1327,184 +892,6 @@ xrChunker.updateTransform(
   [2, 2, 2]
 );
 
-const gpuParticlesMeshMaterial = (() => {
-  const depthVsh = `
-    // uniform float uAnimation;
-    // attribute float typex;
-    // varying vec3 vPosition;
-    uniform mat4 uMatrixWorld;
-    uniform mat4 uProjectionMatrixInverse;
-    uniform vec3 uDirection;
-    uniform sampler2D uDepthTex;
-    uniform float uNear;
-    uniform float uFar;
-    ${XRRaycaster.decodePixelDepthGLSL}
-    void main() {
-      float xFactor = uv.x;
-      float yFactor = uv.y;
-      float z = decodePixelDepth(texture2D(uDepthTex, vec2(xFactor, 1.0-yFactor)));
-
-      vec2 coords = vec2(xFactor * 2. - 1., -yFactor * 2. + 1.);
-      vec3 origin = (uMatrixWorld * uProjectionMatrixInverse * vec4(coords.x, coords.y, ( uNear + uFar ) / ( uNear - uFar ), 1.0)).xyz;
-      vec3 direction = uDirection;
-
-      vec3 p = position + origin + direction * z;
-      gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.);
-    }
-  `;
-  const depthFsh = `
-    // const float infinity = 1./0.;
-    void main() {
-      gl_FragColor = vec4(1.0, 0.0, 1.0, 1.0);
-    }
-  `;
-  return new THREE.ShaderMaterial({
-    uniforms: {
-      uMatrixWorld: {
-        type: 'm4',
-        value: new THREE.Matrix4(),
-      },
-      uProjectionMatrixInverse: {
-        type: 'm4',
-        value: new THREE.Matrix4(),
-      },
-      uDirection: {
-        type: 'v3',
-        value: new THREE.Vector3(),
-      },
-      uNear: {
-        type: 'f',
-        value: 0,
-      },
-      uFar: {
-        type: 'f',
-        value: 1,
-      },
-      uDepthTex: {
-        type: 't',
-        value: null,
-      },
-    },
-    vertexShader: depthVsh,
-    fragmentShader: depthFsh,
-    // transparent: true,
-  });
-})();
-const gpuParticlesMesh = (() => {
-  const cubeGeometry = new THREE.BoxBufferGeometry(0.01, 0.01, 0.01).toNonIndexed();
-  const positions = new Float32Array(cubeGeometry.attributes.position.array.length*xrRaycaster.width*xrRaycaster.height);
-  const numVecs = cubeGeometry.attributes.position.array.length/3;
-  const uvs = new Float32Array(numVecs*2*colorTargetSize*colorTargetSize);
-
-  let i = 0;
-  for (let x = 0; x < colorTargetSize; x++) {
-    for (let y = 0; y < colorTargetSize; y++) {
-      const xFactor = x / colorTargetSize;
-      const yFactor = y / colorTargetSize;
-
-      positions.set(cubeGeometry.attributes.position.array, i*cubeGeometry.attributes.position.array.length);
-      for (let j = 0; j < numVecs; j++) {
-        uvs[i*numVecs*2 + j*2] = xFactor;
-        uvs[i*numVecs*2 + j*2 + 1] = yFactor;
-      }
-      i++;
-    }
-  }
-
-  const geometry = new THREE.BufferGeometry();
-  geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-  geometry.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
-  const material = gpuParticlesMeshMaterial;
-  const mesh = new THREE.Mesh(geometry, material);
-  mesh.frustumCulled = false;
-  mesh.update = () => {
-    // xrRaycaster.updateView(camera.position.toArray(), camera.quaternion.toArray());
-    // xrRaycaster.updateTexture();
-
-    gpuParticlesMeshMaterial.uniforms.uMatrixWorld.value.copy(xrRaycaster.camera.matrixWorld);
-    gpuParticlesMeshMaterial.uniforms.uProjectionMatrixInverse.value.copy(xrRaycaster.camera.projectionMatrixInverse);
-    gpuParticlesMeshMaterial.uniforms.uDirection.value.set(0, 0, -1).transformDirection(xrRaycaster.camera.matrixWorld);
-    gpuParticlesMeshMaterial.uniforms.uNear.value = xrRaycaster.camera.near;
-    gpuParticlesMeshMaterial.uniforms.uFar.value = xrRaycaster.camera.far;
-    gpuParticlesMeshMaterial.uniforms.uDepthTex.value = xrRaycaster.getDepthTexture();
-  };
-  return mesh;
-})();
-// container.add(gpuParticlesMesh);
-
-const engineMesh = (() => {
-  const object = new THREE.Object3D();
-  object.basePosition = new THREE.Vector3(-3, 0, 0);
-  object.nextUpdateTime = 0;
-  object.exobotMeshes = [];
-
-  const loader = new THREE.GLTFLoader().setPath( 'models/' );
-  loader.load( 'engine.glb', function ( o ) {
-
-    o = o.scene;
-    o.traverse(o => {
-      if (o.isMesh) {
-        o.castShadow = true;
-      }
-    });
-
-    o.position.set(0, 0.15, 0);
-    o.quaternion.setFromUnitVectors(
-      new THREE.Vector3(0, 0, -1),
-      new THREE.Vector3(0, 0, 1)
-    );
-    o.scale.set(0.15, 0.15, 0.15);
-    o.updateMatrixWorld();
-    object.add(o);
-
-  }, undefined, function ( e ) {
-
-    console.error( e );
-
-  } );
-
-  return object;
-})();
-container.add(engineMesh);
-
-const exobotMesh = (() => {
-  const object = new THREE.Object3D();
-  object.rotation.order = 'YXZ';
-  object.basePosition = new THREE.Vector3(-1, 1.5, -1);
-  object.scale.set(0.2, 0.2, 0.2);
-
-  const loader = new THREE.GLTFLoader().setPath( 'models/' );
-  loader.load( 'exobot.glb', function ( o ) {
-
-    o = o.scene;
-    o.traverse(o => {
-      if (o.isMesh) {
-        o.castShadow = true;
-      }
-    });
-
-    /* o.quaternion.setFromUnitVectors(
-      new THREE.Vector3(0, 0, -1),
-      new THREE.Vector3(0, 0, 1)
-    ); */
-    o.updateMatrixWorld();
-    object.add(o);
-
-  }, undefined, function ( e ) {
-
-    console.error( e );
-
-  } );
-
-  return object;
-})();
-container.add(exobotMesh);
-
-const mouse = {
-  x: 0.5,
-  y: 0.5,
-};
-
 const boxGeometry = (() => {
   const BAG_SIZE = 1;
   const BAG_Y_OFFSET = -0.5;
@@ -1525,25 +912,25 @@ const boxGeometry = (() => {
   geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
   // axis
   positions.set(
-    lineGeometry.clone().applyMatrix(
+    lineGeometry.clone().applyMatrix4(
       localMatrix.makeTranslation(-BAG_SIZE/2, 0, -BAG_SIZE/2)
     ).attributes.position.array,
     lineGeometry.attributes.position.array.length * 0
   );
   positions.set(
-    lineGeometry.clone().applyMatrix(
+    lineGeometry.clone().applyMatrix4(
       localMatrix.makeTranslation(BAG_SIZE/2, 0, -BAG_SIZE/2)
     ).attributes.position.array,
     lineGeometry.attributes.position.array.length * 1
   );
   positions.set(
-    lineGeometry.clone().applyMatrix(
+    lineGeometry.clone().applyMatrix4(
       localMatrix.makeTranslation(-BAG_SIZE/2, 0, BAG_SIZE/2)
     ).attributes.position.array,
     lineGeometry.attributes.position.array.length * 2
   );
   positions.set(
-    lineGeometry.clone().applyMatrix(
+    lineGeometry.clone().applyMatrix4(
       localMatrix.makeTranslation(BAG_SIZE/2, 0, BAG_SIZE/2)
     ).attributes.position.array,
     lineGeometry.attributes.position.array.length * 3
@@ -1551,40 +938,40 @@ const boxGeometry = (() => {
   // axis
   positions.set(
     lineGeometry.clone()
-      .applyMatrix(
+      .applyMatrix4(
         localMatrix.makeRotationFromQuaternion(localQuaternion.setFromAxisAngle(localVector.set(0, 0, 1), Math.PI/2))
       )
-      .applyMatrix(
+      .applyMatrix4(
         localMatrix.makeTranslation(0, -BAG_SIZE/2, -BAG_SIZE/2)
       ).attributes.position.array,
     lineGeometry.attributes.position.array.length * 4
   );
   positions.set(
     lineGeometry.clone()
-      .applyMatrix(
+      .applyMatrix4(
         localMatrix.makeRotationFromQuaternion(localQuaternion.setFromAxisAngle(localVector.set(0, 0, 1), Math.PI/2))
       )
-      .applyMatrix(
+      .applyMatrix4(
         localMatrix.makeTranslation(0, -BAG_SIZE/2, BAG_SIZE/2)
       ).attributes.position.array,
     lineGeometry.attributes.position.array.length * 5
   );
   positions.set(
     lineGeometry.clone()
-      .applyMatrix(
+      .applyMatrix4(
         localMatrix.makeRotationFromQuaternion(localQuaternion.setFromAxisAngle(localVector.set(0, 0, 1), Math.PI/2))
       )
-      .applyMatrix(
+      .applyMatrix4(
         localMatrix.makeTranslation(0, BAG_SIZE/2, -BAG_SIZE/2)
       ).attributes.position.array,
     lineGeometry.attributes.position.array.length * 6
   );
   positions.set(
     lineGeometry.clone()
-      .applyMatrix(
+      .applyMatrix4(
         localMatrix.makeRotationFromQuaternion(localQuaternion.setFromAxisAngle(localVector.set(0, 0, 1), Math.PI/2))
       )
-      .applyMatrix(
+      .applyMatrix4(
         localMatrix.makeTranslation(0, BAG_SIZE/2, BAG_SIZE/2)
       ).attributes.position.array,
     lineGeometry.attributes.position.array.length * 7
@@ -1592,40 +979,40 @@ const boxGeometry = (() => {
   // axis
   positions.set(
     lineGeometry.clone()
-      .applyMatrix(
+      .applyMatrix4(
         localMatrix.makeRotationFromQuaternion(localQuaternion.setFromAxisAngle(localVector.set(1, 0, 0), Math.PI/2))
       )
-      .applyMatrix(
+      .applyMatrix4(
         localMatrix.makeTranslation(-BAG_SIZE/2, -BAG_SIZE/2, 0)
       ).attributes.position.array,
     lineGeometry.attributes.position.array.length * 8
   );
   positions.set(
     lineGeometry.clone()
-      .applyMatrix(
+      .applyMatrix4(
         localMatrix.makeRotationFromQuaternion(localQuaternion.setFromAxisAngle(localVector.set(1, 0, 0), Math.PI/2))
       )
-      .applyMatrix(
+      .applyMatrix4(
         localMatrix.makeTranslation(-BAG_SIZE/2, BAG_SIZE/2, 0)
       ).attributes.position.array,
     lineGeometry.attributes.position.array.length * 9
   );
   positions.set(
     lineGeometry.clone()
-      .applyMatrix(
+      .applyMatrix4(
         localMatrix.makeRotationFromQuaternion(localQuaternion.setFromAxisAngle(localVector.set(1, 0, 0), Math.PI/2))
       )
-      .applyMatrix(
+      .applyMatrix4(
         localMatrix.makeTranslation(BAG_SIZE/2, -BAG_SIZE/2, 0)
       ).attributes.position.array,
     lineGeometry.attributes.position.array.length * 10
   );
   positions.set(
     lineGeometry.clone()
-      .applyMatrix(
+      .applyMatrix4(
         localMatrix.makeRotationFromQuaternion(localQuaternion.setFromAxisAngle(localVector.set(1, 0, 0), Math.PI/2))
       )
-      .applyMatrix(
+      .applyMatrix4(
         localMatrix.makeTranslation(BAG_SIZE/2, BAG_SIZE/2, 0)
       ).attributes.position.array,
     lineGeometry.attributes.position.array.length * 11
@@ -1653,7 +1040,7 @@ const boxGeometry = (() => {
     color: 0x000000,
     // wireframe: true,
   });
-  const mesh = new THREE.Mesh(boxGeometry.clone().applyMatrix(new THREE.Matrix4().makeScale(0.3, 0.3, 0.3)), material);
+  const mesh = new THREE.Mesh(boxGeometry.clone().applyMatrix4(new THREE.Matrix4().makeScale(0.3, 0.3, 0.3)), material);
 
   const glassesMesh = (() => {
     // const geometry = new THREE.EdgesGeometry(new THREE.BoxBufferGeometry(0.35, 0.15, 0.05));
@@ -1661,7 +1048,7 @@ const boxGeometry = (() => {
       color: 0x000000,
       // wireframe: true,
     });
-    const mesh = new THREE.Mesh(boxGeometry.clone().applyMatrix(new THREE.Matrix4().makeScale(0.35, 0.15, 0.05)), material);
+    const mesh = new THREE.Mesh(boxGeometry.clone().applyMatrix4(new THREE.Matrix4().makeScale(0.35, 0.15, 0.05)), material);
     mesh.position.set(0, 0.07, -0.3/2 - 0.05/2);
 
     const eyeMesh = (() => {
@@ -1678,7 +1065,7 @@ const boxGeometry = (() => {
     mesh.add(eyeMesh);
 
     const leftFrameMesh = (() => {
-      const mesh = new THREE.Mesh(boxGeometry.clone().applyMatrix(new THREE.Matrix4().makeScale(0.05, 0.05, 0.3)), material);
+      const mesh = new THREE.Mesh(boxGeometry.clone().applyMatrix4(new THREE.Matrix4().makeScale(0.05, 0.05, 0.3)), material);
       mesh.position.set(-0.18, 0.07, 0.3/2 + 0.05/2);
       mesh.rotation.x = -0.1 * Math.PI;
       mesh.rotation.order = 'YXZ';
@@ -1686,7 +1073,7 @@ const boxGeometry = (() => {
     })();
     mesh.add(leftFrameMesh);
     const rightFrameMesh = (() => {
-      const mesh = new THREE.Mesh(boxGeometry.clone().applyMatrix(new THREE.Matrix4().makeScale(0.05, 0.05, 0.3)), material);
+      const mesh = new THREE.Mesh(boxGeometry.clone().applyMatrix4(new THREE.Matrix4().makeScale(0.05, 0.05, 0.3)), material);
       mesh.position.set(0.18, 0.07, 0.3/2 + 0.05/2);
       mesh.rotation.x = -0.1 * Math.PI;
       mesh.rotation.order = 'YXZ';
@@ -1694,7 +1081,7 @@ const boxGeometry = (() => {
     })();
     mesh.add(rightFrameMesh);
     const backFrameMesh = (() => {
-      const mesh = new THREE.Mesh(boxGeometry.clone().applyMatrix(new THREE.Matrix4().makeScale(0.3, 0.05, 0.05)), material);
+      const mesh = new THREE.Mesh(boxGeometry.clone().applyMatrix4(new THREE.Matrix4().makeScale(0.3, 0.05, 0.05)), material);
       mesh.position.set(0, 0.13, 0.34);
       mesh.rotation.x = -0.1 * Math.PI;
       mesh.rotation.order = 'YXZ';
@@ -1716,7 +1103,7 @@ const tabMesh1 = (() => {
     color: 0x000000,
     // wireframe: true,
   });
-  const mesh = new THREE.Mesh(boxGeometry.clone().applyMatrix(new THREE.Matrix4().makeScale(portalSize, portalSize, 0)), material);
+  const mesh = new THREE.Mesh(boxGeometry.clone().applyMatrix4(new THREE.Matrix4().makeScale(portalSize, portalSize, 0)), material);
   mesh.position.set(1, 1.5, -4);
 
   /* const labelMesh = (() => {
@@ -1749,7 +1136,7 @@ container.add(tabMesh1);
 
 const innerMesh = (() => {
   const geometry = new THREE.PlaneBufferGeometry(portalSize, portalSize);
-  const mesh = new THREE.Reflector(geometry, {
+  const mesh = new Reflector(geometry, {
     clipBias: 0.003,
     textureWidth: 1024 * window.devicePixelRatio,
     textureHeight: 1024 * window.devicePixelRatio,
@@ -1775,7 +1162,7 @@ container.add(innerMesh);
     color: 0x000000,
     // wireframe: true,
   });
-  const mesh = new THREE.Mesh(boxGeometry.clone().applyMatrix(new THREE.Matrix4().makeScale(1, 1, 0.4)), material);
+  const mesh = new THREE.Mesh(boxGeometry.clone().applyMatrix4(new THREE.Matrix4().makeScale(1, 1, 0.4)), material);
   mesh.position.set(0.5, 1.5, -1);
   mesh.rotation.y = -0.25*Math.PI;
   mesh.rotation.order = 'YXZ';
@@ -1789,218 +1176,8 @@ meteorMesher.nextUpdateTime = 0;
 meteorMesher.meteorMeshes = [];
 container.add(meteorMesher);
 
-scene.add(container);
+app.object.add(container);
 
-const keys = {
-  left: false,
-  right: false,
-  up: false,
-  down: false,
-};
-window.addEventListener('keydown', e => {
-  switch (e.which) {
-    case 87: { // W
-      keys.up = true;
-      break;
-    }
-    case 65: { // A
-      keys.left = true;
-      break;
-    }
-    case 83: { // S
-      keys.down = true;
-      break;
-    }
-    case 68: { // D
-      keys.right = true;
-      break;
-    }
-  }
-});
-window.addEventListener('keyup', e => {
-  switch (e.which) {
-    case 87: { // W
-      keys.up = false;
-      break;
-    }
-    case 65: { // A
-      keys.left = false;
-      break;
-    }
-    case 83: { // S
-      keys.down = false;
-      break;
-    }
-    case 68: { // D
-      keys.right = false;
-      break;
-    }
-  }
-});
-window.addEventListener('mousemove', e => {
-  mouse.x = e.clientX / window.innerWidth;
-  mouse.y = e.clientY / window.innerHeight;
-
-  /* camera.position.set(0, 0, 4)
-    .add(new THREE.Vector3(-2, 1, -2)
-      .applyQuaternion(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), -Math.PI*2*0.1 * (mouse.x-0.5)*2))
-      .applyQuaternion(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -Math.PI*2*0.1 * (mouse.y-0.5)))
-    );
-  camera.quaternion.setFromUnitVectors(
-    new THREE.Vector3(0, 0, -1),
-    new THREE.Vector3((mouse.x-0.5)*0.2, -(mouse.y-0.5)*0.2, -1).normalize()
-  ); */
-  dolly.quaternion.setFromUnitVectors(
-    new THREE.Vector3(0, 0, -1),
-    new THREE.Vector3(-(mouse.x-0.5)*0.5, (mouse.y-0.5)*0.5, -1).normalize()
-  ).inverse();
-  // _updateSkin();
-});
-window.addEventListener('resize', e => {
-  renderer.setSize(window.innerWidth, window.innerHeight);
-
-  _setCamera();
-});
-
-let session = null;
-let possessRig = false;
-const _setSession = async newSession => {
-  session = newSession;
-
-  const _end = () => {
-    session.removeEventListener('end', _end);
-    session = null;
-
-    clearInterval(loadReferenceSpaceInterval);
-  };
-  session.addEventListener('end', _end);
-
-  let referenceSpace;
-  let referenceSpaceType = '';
-  const _loadReferenceSpace = async () => {
-    const lastReferenceSpaceType = referenceSpaceType;
-    try {
-      referenceSpace = await session.requestReferenceSpace('local-floor');
-      referenceSpaceType = 'local-floor';
-    } catch (err) {
-      referenceSpace = await session.requestReferenceSpace('local');
-      referenceSpaceType = 'local';
-    }
-
-    if (referenceSpaceType !== lastReferenceSpaceType) {
-      console.log(`referenceSpace changed to ${referenceSpaceType}`);
-    }
-  };
-  await _loadReferenceSpace();
-  const loadReferenceSpaceInterval = setInterval(_loadReferenceSpace, 1000);
-
-  await new Promise((accept, reject) => {
-    renderer.vr.setSession(session);
-
-    session.requestAnimationFrame((timestamp, frame) => {
-      renderer.vr.enabled = true;
-      renderer.setAnimationLoop(null);
-      renderer.vr.setAnimationLoop(animate);
-
-      const pose = frame.getViewerPose(referenceSpace);
-      const viewport = session.renderState.baseLayer.getViewport(pose.views[0]);
-      // const width = viewport.width;
-      const height = viewport.height;
-      const fullWidth = (() => {
-        let result = 0;
-        for (let i = 0; i < pose.views.length; i++) {
-          result += session.renderState.baseLayer.getViewport(pose.views[i]).width;
-        }
-        return result;
-      })();
-      renderer.vr.setSession(null);
-      renderer.setSize(fullWidth, height);
-      renderer.setPixelRatio(1);
-      renderer.vr.setSession(session);
-
-      if (typeof FakeXRDisplay !== 'undefined') {
-        fakeXrDisplay = new FakeXRDisplay();
-        camera.projectionMatrix.toArray(fakeXrDisplay.projectionMatrix);
-      }
-
-      accept();
-    });
-  });
-};
-const enterXrButton = document.getElementById('enter-xr-button');
-const noXrButton = document.getElementById('no-xr-button');
-(async () => {
-  let result;
-  if (navigator.xr) {
-    try {
-      await navigator.xr.supportsSession('immersive-vr');
-      result = true;
-    } catch (err) {
-      console.warn(err);
-      result = false;
-    }
-  } else {
-    result = false;
-  }
-  if (result) {
-    console.log('xr available');
-    enterXrButton.style.display = null;
-  } else {
-    console.log('no xr');
-    noXrButton.style.display = null;
-  }
-})();
-enterXrButton.addEventListener('click', async () => {
-  if (!session) {
-    const newSession = await navigator.xr.requestSession('immersive-vr', {
-      requiredFeatures: ['local-floor'],
-    });
-    await _setSession(newSession);
-  }
-
-  possessRig = true;
-  if (rig) {
-    rig.decapitate();
-  }
-});
-
-const _makeExobotMesh = (() => {
-  const geometry = new THREE.PlaneBufferGeometry(0.3, 0.3);
-  const texture = new THREE.Texture(
-    null,
-    THREE.UVWrapping,
-    THREE.ClampToEdgeWrapping,
-    THREE.ClampToEdgeWrapping,
-    THREE.LinearFilter,
-    THREE.LinearMipMapLinearFilter,
-    THREE.RGBAFormat,
-    THREE.UnsignedByteType,
-    16
-  );
-  new Promise((accept, reject) => {
-    const img = new Image();
-    img.crossOrigin = 'Anonymous';
-    img.src = 'media/logo.png';
-    img.onload = () => {
-      accept(img);
-    };
-    img.onerror = err => {
-      reject(err);
-    };
-  })
-    .then(img => {
-      texture.image = img;
-      texture.needsUpdate = true;
-    });
-  const material = new THREE.MeshBasicMaterial({
-    map: texture,
-    side: THREE.DoubleSide,
-    transparent: true,
-    // alphaTest: 0.9,
-    depthWrite: false,
-  });
-  return () => new THREE.Mesh(geometry, material);
-})();
 const _makeMeteorMaterial = src => {
   const texture = new THREE.Texture(
     null,
@@ -2037,8 +1214,8 @@ const _makeMeteorMaterial = src => {
   return material;
 };
 const METEORS = [
-  {geometry: new THREE.PlaneBufferGeometry(0.6, 0.6), material: _makeMeteorMaterial('assets/Group 17@2x.png')},
-  {geometry: new THREE.PlaneBufferGeometry(0.6, 0.6), material: _makeMeteorMaterial('assets/Group 31@2x.png')},
+  {geometry: new THREE.PlaneBufferGeometry(0.6, 0.6), material: _makeMeteorMaterial(app.files['./assets/Group 17@2x.png'])},
+  {geometry: new THREE.PlaneBufferGeometry(0.6, 0.6), material: _makeMeteorMaterial(app.files['./assets/Group 31@2x.png'])},
 ];
 const _makeMeteorMesh = () => {
   const {geometry, material} = METEORS[Math.floor(Math.random() * METEORS.length)];
@@ -2057,246 +1234,9 @@ const _makeMeteorMesh = () => {
   return mesh;
 };
 let lastUpdateTime = Date.now();
-let lastRattleTime = Date.now();
-let lastRattleDirection = false;
 function animate(timestamp, frame, referenceSpace) {
   const now = Date.now();
   const timeDiff = now - lastUpdateTime;
-
-  {
-    const rattleTimeDiff = now - lastRattleTime;
-    if (rattleTimeDiff > 40) {
-      engineMesh.position
-        .copy(engineMesh.basePosition)
-        .add(localVector.set(
-          0.004 * (lastRattleDirection ? 1 : -1),
-          0,//Math.random() * 0.015,
-          0//Math.random() * 0.01,
-        ));
-      lastRattleTime = now;
-      lastRattleDirection = !lastRattleDirection;
-    }
-  }
-
-  if (now > engineMesh.nextUpdateTime) {
-    const exobotMesh = _makeExobotMesh();
-    exobotMesh.quaternion.setFromUnitVectors(
-      localVector.set(0, 1, 0),
-      localVector2.set((Math.random()-0.5), 1, (Math.random()-0.5)*2).normalize()
-    );
-    const baseScale = 0.5 + Math.random();
-    exobotMesh.baseScale = baseScale;
-    exobotMesh.scale.set(baseScale, baseScale, baseScale);
-    exobotMesh.startTime = now;
-    exobotMesh.endTime = exobotMesh.startTime + 3000;
-    engineMesh.add(exobotMesh);
-    engineMesh.exobotMeshes.push(exobotMesh);
-
-    engineMesh.nextUpdateTime = now + (0.2 + Math.random()*0.5)*1000;
-  }
-  engineMesh.exobotMeshes = engineMesh.exobotMeshes.filter(exobotMesh => {
-    if (now < exobotMesh.endTime) {
-      exobotMesh.position.add(localVector.set(
-        0,
-        0.0008 * timeDiff,
-        0
-      ).applyQuaternion(exobotMesh.quaternion));
-      const scale = exobotMesh.baseScale * (1 - (now - exobotMesh.startTime) / (exobotMesh.endTime - exobotMesh.startTime));
-      exobotMesh.scale.set(scale, scale, scale);
-      return true;
-    } else {
-      engineMesh.remove(exobotMesh);
-      return false;
-    }
-  });
-
-  const velocity = new THREE.Vector3();
-  const speed = 0.015;
-  if (keys.up) {
-    velocity.z--;
-  }
-  if (keys.down) {
-    velocity.z++;
-  }
-  if (keys.left) {
-    velocity.x--;
-  }
-  if (keys.right) {
-    velocity.x++;
-  }
-  dolly.position.add(velocity.normalize().multiplyScalar(speed));
-  dolly.position.x = Math.min(Math.max(dolly.position.x, -1), 1);
-  dolly.position.z = Math.min(Math.max(dolly.position.z, -0.5), 1);
-
-  const factor = (now/2000) % 2000;
-  exobotMesh.position
-    .copy(exobotMesh.basePosition)
-    .add(localVector.set(0, Math.sin(factor * Math.PI*2)*0.1, 0))
-    .add(localVector.set((mouse.x - 0.5)*2*2, -(mouse.y - 0.5)*2*2, 0));
-  exobotMesh.rotation.z = Math.sin(factor * Math.PI*2/2)*0.2;
-
-  if (rig) {
-    if (possessRig) {
-      const vrCameras = renderer.vr.getCamera(camera).cameras;
-      const vrCamera = vrCameras[0];
-      const vrCamera2 = vrCameras[1];
-      vrCamera.matrixWorld.decompose(vrCamera.position, vrCamera.quaternion, vrCamera.scale);
-      vrCamera2.matrixWorld.decompose(vrCamera2.position, vrCamera2.quaternion, vrCamera2.scale);
-      vrCamera.position.add(vrCamera2.position).divideScalar(2);
-      const {inputSources} = session;
-      const gamepads = navigator.getGamepads();
-
-      rig.inputs.hmd.position.copy(vrCamera.position).sub(container.position).multiplyScalar(heightFactor);
-      rig.inputs.hmd.quaternion.copy(vrCamera.quaternion);
-
-      const _getGamepad = i => {
-        const handedness = i === 0 ? 'left' : 'right';
-        const inputSource = inputSources.find(inputSource => inputSource.handedness === handedness);
-        let pose, gamepad;
-        if (inputSource && (pose = frame.getPose(inputSource.gripSpace, referenceSpace)) && (gamepad = inputSource.gamepad || gamepads[i])) {
-          const {transform} = pose;
-          const {position, orientation, matrix} = transform;
-          if (position) {
-            const rawP = localVector.copy(position);
-            const p = localVector2.copy(rawP).sub(container.position).multiplyScalar(heightFactor);
-            const q = localQuaternion.copy(orientation);
-            const pressed = gamepad.buttons[0].pressed;
-            // const lastPressed = lastPresseds[i];
-            const pointer = gamepad.buttons[0].value;
-            const grip = gamepad.buttons[1].value;
-            const pad = gamepad.axes[1] <= -0.5 || gamepad.axes[3] <= -0.5;
-            const padX = gamepad.axes[0] !== 0 ? gamepad.axes[0] : gamepad.axes[2];
-            const padY = gamepad.axes[1] !== 0 ? gamepad.axes[1] : gamepad.axes[3];
-            const stick = !!gamepad.buttons[3] && gamepad.buttons[3].pressed;
-            const a = !!gamepad.buttons[4] && gamepad.buttons[4].pressed;
-            const b = !!gamepad.buttons[5] && gamepad.buttons[5].pressed;
-            // const lastB = lastBs[i];
-            return {
-              rawPosition: rawP,
-              position: p,
-              quaternion: q,
-              pressed,
-              // lastPressed,
-              pointer,
-              grip,
-              pad,
-              padX,
-              padY,
-              stick,
-              a,
-              b,
-              // lastB,
-            };
-          } else {
-            return null;
-          }
-        } else {
-          return null;
-        }
-      };
-      const _updateTeleportMesh = (i, pad, lastPad, position, quaternion, padX, padY, stick) => {
-        /* const teleportMesh = teleportMeshes[i];
-        teleportMesh.visible = false;
-
-        if (pad) {
-          localVector.copy(vrCamera.position).applyMatrix4(localMatrix.getInverse(container.matrix));
-          localEuler.setFromQuaternion(quaternion, 'YXZ');
-
-          for (let i = 0; i < 20; i++, localVector.add(localVector2), localEuler.x = Math.max(localEuler.x - Math.PI*0.07, -Math.PI/2)) {
-            localRay.set(localVector, localVector2.set(0, 0, -1).applyQuaternion(localQuaternion.setFromEuler(localEuler)));
-            const intersection = localRay.intersectPlane(floorPlane, localVector3);
-            if (intersection && intersection.distanceTo(localRay.origin) <= 1) {
-              teleportMesh.position.copy(intersection);
-              localEuler.setFromQuaternion(localQuaternion, 'YXZ');
-              localEuler.x = 0;
-              localEuler.z = 0;
-              teleportMesh.quaternion.setFromEuler(localEuler);
-              teleportMesh.visible = true;
-              break;
-            }
-          }
-        } else if (lastPad) {
-          localVector.copy(teleportMesh.position).applyMatrix4(container.matrix).sub(vrCamera.position);
-          localVector.y = 0;
-          container.position.sub(localVector);
-        } */
-
-        if (padX !== 0 || padY !== 0) {
-          localVector.set(padX, 0, padY);
-          const moveLength = localVector.length();
-          if (moveLength > 1) {
-            localVector.divideScalar(moveLength);
-          }
-          const hmdEuler = localEuler.setFromQuaternion(rig.inputs.hmd.quaternion, 'YXZ');
-          localEuler.x = 0;
-          localEuler.z = 0;
-          container.position.sub(localVector.multiplyScalar(walkSpeed * timeDiff * (stick ? 3 : 1) * rig.height).applyEuler(hmdEuler));
-
-          // _updateXrIframeMatrices();
-        }
-      };
-
-      // const wasLastBd = lastBs[0] && lastBs[1];
-
-      const lg = _getGamepad(1);
-      if (lg) {
-        const {rawPosition, position, quaternion, pressed, lastPressed, pointer, grip, pad, b} = lg;
-        rig.inputs.leftGamepad.quaternion.copy(quaternion);
-        rig.inputs.leftGamepad.position.copy(position);
-        rig.inputs.leftGamepad.pointer = pointer;
-        rig.inputs.leftGamepad.grip = grip;
-
-        _updateTeleportMesh(0, pad, false, position, quaternion, 0, 0, false);
-
-        /* lastPresseds[0] = pressed;
-        lastPads[0] = pad;
-        lastBs[0] = b;
-        lastPositions[0].copy(rawPosition); */
-      }
-      const rg = _getGamepad(0);
-      if (rg) {
-        const {rawPosition, position, quaternion, pressed, lastPressed, pointer, grip, pad, padX, padY, stick, b} = rg;
-        rig.inputs.rightGamepad.quaternion.copy(quaternion);
-        rig.inputs.rightGamepad.position.copy(position);
-        rig.inputs.rightGamepad.pointer = pointer;
-        rig.inputs.rightGamepad.grip = grip;
-
-        _updateTeleportMesh(1, false, false, position, quaternion, padX, padY, stick);
-
-        /* lastPresseds[1] = pressed;
-        lastPads[1] = pad;
-        lastBs[1] = b;
-        lastPositions[1].copy(rawPosition); */
-      }
-
-      rig.update();
-    } else {
-      rig.inputs.hmd.quaternion.setFromUnitVectors(
-        new THREE.Vector3(0, 0, -1),
-        exobotMesh.position.clone().sub(rig.inputs.rightGamepad.position).normalize()
-      );
-      rig.inputs.hmd.position.copy(dolly.position)
-        .add(localVector.set(0, 1.25, 0))
-        .add(localVector.set(0, 0, -0.05).applyQuaternion(rig.inputs.hmd.quaternion));
-      rig.inputs.leftGamepad.position.copy(dolly.position).add(localVector.set(0.3, 0.7, 0.1));
-      rig.inputs.leftGamepad.quaternion.setFromAxisAngle(new THREE.Vector3(1, 0, 0), -Math.PI/2*0.7);
-      rig.inputs.leftGamepad.pointer = 1;
-      rig.inputs.leftGamepad.grip = 1;
-      rig.inputs.rightGamepad.position.copy(dolly.position).add(localVector.set(-0.2, 1, 0));
-      rig.inputs.rightGamepad.position.add(
-        new THREE.Vector3(0, 0, -0.3)
-          .applyQuaternion(new THREE.Quaternion().setFromUnitVectors(
-            new THREE.Vector3(0, 0, -1),
-            exobotMesh.position.clone().sub(rig.inputs.rightGamepad.position).normalize()
-          ))
-      );
-      rig.inputs.rightGamepad.quaternion.copy(rig.inputs.hmd.quaternion)
-        .multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), Math.PI/2*0.3));
-      rig.inputs.rightGamepad.pointer = 0;
-      rig.inputs.rightGamepad.grip = 1;
-      rig.update();
-    }
-  }
 
   if (now > meteorMesher.nextUpdateTime) {
     const meteorMesh = _makeMeteorMesh();
@@ -2320,24 +1260,16 @@ function animate(timestamp, frame, referenceSpace) {
   });
 
   floorMesh.material.uniforms.uAnimation.value = (now%2000)/2000;
-  for (let i = 0; i < itemMeshes.length; i++) {
-    const itemMesh = itemMeshes[i];
-    itemMesh.position.y = Math.sin(((now%5000)/5000 + i/3) * Math.PI*2)*0.2;
-  }
-  for (let i = 0; i < pedestalMeshes.length; i++) {
-    const pedestalMesh = pedestalMeshes[i];
-    const v = (now%60000)/60000;
-    pedestalMesh.material.uniforms.uAnimation.value = v;
-    pedestalMesh.skirtMesh.material.uniforms.uAnimation.value = v;
-  }
 
   {
+    app.onBeforeRender();
     const unhideUiMeshes = _hideUiMeshes();
 
     renderer.setRenderTarget(cameraTarget);
     renderer.render(scene, camera);
 
     unhideUiMeshes();
+    app.onAfterRender();
     renderer.setRenderTarget(null);
   }
 
@@ -2356,7 +1288,7 @@ function animate(timestamp, frame, referenceSpace) {
     };
   });
 
-  renderer.render(scene, camera);
+  // renderer.render(scene, camera);
   xrRaycaster.render();
   xrChunker.render();
 
